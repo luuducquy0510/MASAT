@@ -24,6 +24,8 @@ from google.adk.runners import Runner
 from google.adk.sessions import InMemorySessionService
 from google.adk.tools.tool_context import ToolContext
 from google.genai import types
+from a2a.types import Task, TaskStatus, Artifact
+
 
 from .remote_agent_connection import RemoteAgentConnections
 
@@ -88,7 +90,7 @@ class HostAgent:
             model="gemini-2.0-flash",
             name="Host_Agent",
             instruction=self.root_instruction,
-            description="This Host agent orchestrates scheduling pickleball with friends.",
+            description="The Host Agent is a specialized AI travel coordinator that plans and books complete trips. It works by connecting with other agents for flights, stays, and activities to create a full travel itinerary for the user.",
             tools=[
                 self.send_message,
             ],
@@ -96,25 +98,21 @@ class HostAgent:
 
     def root_instruction(self, context: ReadonlyContext) -> str:
         return f"""
-        **Role:** You are the Host Agent, an expert scheduler for pickleball games. Your primary function is to coordinate with friend agents to find a suitable time to play and then book a court.
-
-        **Core Directives:**
-
-        *   **Initiate Planning:** When asked to schedule a game, first determine who to invite and the desired date range from the user.
-        *   **Task Delegation:** Use the `send_message` tool to ask each friend for their availability.
-            *   Frame your request clearly (e.g., "Are you available for pickleball between 2024-08-01 and 2024-08-03?").
-            *   Make sure you pass in the official name of the friend agent for each message request.
-        *   **Analyze Responses:** Once you have availability from all friends, analyze the responses to find common timeslots.
-        *   **Check Court Availability:** Before proposing times to the user, use the `list_court_availabilities` tool to ensure the court is also free at the common timeslots.
-        *   **Propose and Confirm:** Present the common, court-available timeslots to the user for confirmation.
-        *   **Book the Court:** After the user confirms a time, use the `book_pickleball_court` tool to make the reservation. This tool requires a `start_time` and an `end_time`.
-        *   **Transparent Communication:** Relay the final booking confirmation, including the booking ID, to the user. Do not ask for permission before contacting friend agents.
-        *   **Tool Reliance:** Strictly rely on available tools to address user requests. Do not generate responses based on assumptions.
-        *   **Readability:** Make sure to respond in a concise and easy to read format (bullet points are good).
-        *   Each available agent represents a friend. So Bob_Agent represents Bob.
-        *   When asked for which friends are available, you should return the names of the available friends (aka the agents that are active).
-        *   When get
-
+        Role and Objective:
+        You are the Host Agent, a professional travel coordinator. Your main goal is to plan comprehensive trips for users by communicating with and delegating tasks to three specialized agents: flights_agent, stays_agent, and activities_agent. You are responsible for ensuring all components of a travel plan (flights, lodging, and activities) are booked and confirmed.
+        Core Directives:
+        Initiate Planning: When a user requests a travel plan, you must first gather all necessary information, including the destination, travel dates, and any preferences for flights, hotels, or activities.
+        Task Delegation: Use the send_message tool to relay the user's requests to the appropriate agents.
+        For flights, ask the flights_agent to find options based on origin, destination, and dates.
+        For stays, ask the stays_agent to find accommodations in the destination city for the requested dates.
+        For activities, ask the activities_agent to find suggestions based on the destination, dates, and user interests.
+        Analyze and Synthesize Responses: Once you receive responses from all three agents, combine the information into a single, cohesive travel plan.
+        Present and Confirm: Present the complete travel plan to the user. This should include flight details, hotel options, and a list of activities. Be prepared to make revisions or get confirmation before finalizing any bookings.
+        Finalize Bookings: After the user confirms the plan, use the relevant tools to finalize all bookings (e.g., book_flight, book_stay, book_activity).
+        Transparent Communication: Keep the user informed at every step of the process. Do not make any bookings without explicit confirmation. Relay booking confirmations, including any reservation IDs, to the user.
+        Tool Reliance: Strictly rely on your available tools to address user requests. Do not make assumptions or generate information that hasn't been provided by one of your specialized agents.
+        Readability: Make your responses concise and easy to read. Bullet points are an excellent way to present the final travel plan.
+        Each available agent represents a specialized service. The flights_agent handles flights, the stays_agent handles accommodations, and the activities_agent handles activities.
         **Today's Date (YYYY-MM-DD):** {datetime.now().strftime("%Y-%m-%d")}
 
         <Available Agents>
@@ -128,6 +126,8 @@ class HostAgent:
         """
         Streams the agent's response to a given query.
         """
+        tool_context = ToolContext(state={})
+
         session = await self._runner.session_service.get_session(
             app_name=self._agent.name,
             user_id=self._user_id,
@@ -141,11 +141,28 @@ class HostAgent:
                 state={},
                 session_id=session_id,
             )
+            
         async for event in self._runner.run_async(
             user_id=self._user_id, session_id=session.id, new_message=content
         ):
-            if event.is_final_response():
-                response = ""
+            if event.content and event.content.parts:
+                for part in event.content.parts:
+                    if getattr(part, "functionCall", None):
+                        fc = part.functionCall
+                        # dispatch task to the sub-agent
+                        result = await self.send_message(
+                            agent_name=fc.args["agent_name"],
+                            task=fc.args["task"],
+                            tool_context=tool_context
+                        )
+                        # optionally, log or yield the result
+                        yield {
+                            "is_task_complete": True,
+                            "content": f"Task sent to {fc.args['agent_name']}: {result}"
+                        }
+                        continue
+                    if event.is_final_response():
+                        response = ""
                 if (
                     event.content
                     and event.content.parts
@@ -164,8 +181,62 @@ class HostAgent:
                     "updates": "The host agent is thinking...",
                 }
 
+    # async def send_message(self, agent_name: str, task: str, tool_context: ToolContext):
+    #     """Sends a task to a remote friend agent."""
+    #     if agent_name not in self.remote_agent_connections:
+    #         raise ValueError(f"Agent {agent_name} not found")
+    #     client = self.remote_agent_connections[agent_name]
+
+    #     if not client:
+    #         raise ValueError(f"Client not available for {agent_name}")
+
+    #     # Simplified task and context ID management
+    #     state = tool_context.state
+    #     task_id = state.get("task_id", str(uuid.uuid4()))
+    #     context_id = state.get("context_id", str(uuid.uuid4()))
+    #     message_id = str(uuid.uuid4())
+
+    #     # Create the task on the sub-agent first
+    #     remote_task = Task(
+    #         id=task_id,
+    #         skill_id="web_search",  # must match the sub-agent skill
+    #         input={"query": task},
+    #     )
+    #     await client.task_store.create_task(remote_task) 
+        
+    #     payload = {
+    #         "message": {
+    #             "role": "user",
+    #             "parts": [{"type": "text", "text": task}],
+    #             "messageId": message_id,
+    #             "taskId": task_id,
+    #             "contextId": context_id,
+    #         },
+    #     }
+
+    #     message_request = SendMessageRequest(
+    #         id=message_id, params=MessageSendParams.model_validate(payload)
+    #     )
+    #     send_response: SendMessageResponse = await client.send_message(message_request)
+    #     print("send_response", send_response)
+
+    #     if not isinstance(
+    #         send_response.root, SendMessageSuccessResponse
+    #     ) or not isinstance(send_response.root.result, Task):
+    #         print("Received a non-success or non-task response. Cannot proceed.")
+    #         return
+
+    #     response_content = send_response.root.model_dump_json(exclude_none=True)
+    #     json_content = json.loads(response_content)
+
+    #     resp = []
+    #     if json_content.get("result", {}).get("artifacts"):
+    #         for artifact in json_content["result"]["artifacts"]:
+    #             if artifact.get("parts"):
+    #                 resp.extend(artifact["parts"])
+    #     return resp
     async def send_message(self, agent_name: str, task: str, tool_context: ToolContext):
-        """Sends a task to a remote friend agent."""
+        """Sends a task to a remote friend agent and returns their response parts."""
         if agent_name not in self.remote_agent_connections:
             raise ValueError(f"Agent {agent_name} not found")
         client = self.remote_agent_connections[agent_name]
@@ -195,22 +266,31 @@ class HostAgent:
         send_response: SendMessageResponse = await client.send_message(message_request)
         print("send_response", send_response)
 
-        if not isinstance(
-            send_response.root, SendMessageSuccessResponse
-        ) or not isinstance(send_response.root.result, Task):
-            print("Received a non-success or non-task response. Cannot proceed.")
-            return
+        # Ensure response is successful
+        if not isinstance(send_response.root, SendMessageSuccessResponse):
+            print("Non-success response received from agent")
+            return []
 
-        response_content = send_response.root.model_dump_json(exclude_none=True)
-        json_content = json.loads(response_content)
+        # Extract artifacts from the response
+        artifacts_data = getattr(send_response.root.result, "artifacts", [])
+        if not artifacts_data:
+            return []
 
+        # Create a proper Task object with required fields
+        remote_task = Task(
+            id=task_id,
+            contextId=context_id,
+            status=TaskStatus.pending,  # or TaskStatus.completed if you know it
+            artifacts=[Artifact(**a.model_dump()) for a in artifacts_data],
+        )
+
+        # Flatten all parts into a single list to return
         resp = []
-        if json_content.get("result", {}).get("artifacts"):
-            for artifact in json_content["result"]["artifacts"]:
-                if artifact.get("parts"):
-                    resp.extend(artifact["parts"])
-        return resp
+        for artifact in remote_task.artifacts:
+            if artifact.parts:
+                resp.extend(artifact.parts)
 
+        return resp
 
 def _get_initialized_host_agent_sync():
     """Synchronously creates and initializes the HostAgent."""
@@ -218,9 +298,9 @@ def _get_initialized_host_agent_sync():
     async def _async_main():
         # Hardcoded URLs for the friend agents
         friend_agent_urls = [
-            "http://localhost:10002",  # Karley's Agent
-            "http://localhost:10003",  # Nate's Agent
-            "http://localhost:10004",  # Kaitlynn's Agent
+            "http://localhost:10002",  # Activities Agent
+            "http://localhost:10003",  # Flights Agent
+            "http://localhost:10004",  # Stays Agent
         ]
 
         print("initializing host agent")
