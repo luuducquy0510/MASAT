@@ -1,5 +1,0 @@
-a2a-sdk
-python-dotenv
-uvicorn
-google-adk
-nest-asyncio

@@ -1,0 +1,8 @@
+a2a-sdk
+python-dotenv
+uvicorn
+google-adk
+nest-asyncio
+fastmcp
+beautifulsoup4
+langchain-tavily

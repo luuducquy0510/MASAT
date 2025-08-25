@@ -24,8 +24,9 @@ logger = logging.getLogger(__name__)
 logger.setLevel(logging.DEBUG)
 
 
+USER_ID = "stays_agent"
 class StayAgentExecutor(AgentExecutor):
-    """An AgentExecutor that runs Karley's ADK-based Agent."""
+    """An AgentExecutor that runs Stay ADK-based Agent."""
 
     def __init__(self, runner: Runner):
         self.runner = runner
@@ -35,9 +36,9 @@ class StayAgentExecutor(AgentExecutor):
         self, session_id, new_message: types.Content
     ) -> AsyncGenerator[Event, None]:
         return self.runner.run_async(
-            session_id=session_id, user_id="karley_agent", new_message=new_message
+            session_id=session_id, user_id=USER_ID, new_message=new_message
         )
-
+            
     async def _process_request(
         self,
         new_message: types.Content,
@@ -53,12 +54,12 @@ class StayAgentExecutor(AgentExecutor):
                     event.content.parts if event.content and event.content.parts else []
                 )
                 logger.debug("Yielding final response: %s", parts)
-                task_updater.add_artifact(parts)
-                task_updater.complete()
+                await task_updater.add_artifact(parts)
+                await task_updater.complete()
                 break
             if not event.get_function_calls():
                 logger.debug("Yielding update response")
-                task_updater.update_status(
+                await task_updater.update_status(
                     TaskState.working,
                     message=task_updater.new_agent_message(
                         convert_genai_parts_to_a2a(
@@ -83,8 +84,8 @@ class StayAgentExecutor(AgentExecutor):
 
         updater = TaskUpdater(event_queue, context.task_id, context.context_id)
         if not context.current_task:
-            updater.submit()
-        updater.start_work()
+            await updater.submit()
+        await updater.start_work()
         await self._process_request(
             types.UserContent(
                 parts=convert_a2a_parts_to_genai(context.message.parts),
@@ -98,12 +99,12 @@ class StayAgentExecutor(AgentExecutor):
 
     async def _upsert_session(self, session_id: str):
         session = await self.runner.session_service.get_session(
-            app_name=self.runner.app_name, user_id="karley_agent", session_id=session_id
+            app_name=self.runner.app_name, user_id=USER_ID, session_id=session_id
         )
         if session is None:
             session = await self.runner.session_service.create_session(
                 app_name=self.runner.app_name,
-                user_id="karley_agent",
+                user_id=USER_ID,
                 session_id=session_id,
             )
         if session is None:

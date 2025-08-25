@@ -181,62 +181,8 @@ class HostAgent:
                     "updates": "The host agent is thinking...",
                 }
 
-    # async def send_message(self, agent_name: str, task: str, tool_context: ToolContext):
-    #     """Sends a task to a remote friend agent."""
-    #     if agent_name not in self.remote_agent_connections:
-    #         raise ValueError(f"Agent {agent_name} not found")
-    #     client = self.remote_agent_connections[agent_name]
-
-    #     if not client:
-    #         raise ValueError(f"Client not available for {agent_name}")
-
-    #     # Simplified task and context ID management
-    #     state = tool_context.state
-    #     task_id = state.get("task_id", str(uuid.uuid4()))
-    #     context_id = state.get("context_id", str(uuid.uuid4()))
-    #     message_id = str(uuid.uuid4())
-
-    #     # Create the task on the sub-agent first
-    #     remote_task = Task(
-    #         id=task_id,
-    #         skill_id="web_search",  # must match the sub-agent skill
-    #         input={"query": task},
-    #     )
-    #     await client.task_store.create_task(remote_task) 
-        
-    #     payload = {
-    #         "message": {
-    #             "role": "user",
-    #             "parts": [{"type": "text", "text": task}],
-    #             "messageId": message_id,
-    #             "taskId": task_id,
-    #             "contextId": context_id,
-    #         },
-    #     }
-
-    #     message_request = SendMessageRequest(
-    #         id=message_id, params=MessageSendParams.model_validate(payload)
-    #     )
-    #     send_response: SendMessageResponse = await client.send_message(message_request)
-    #     print("send_response", send_response)
-
-    #     if not isinstance(
-    #         send_response.root, SendMessageSuccessResponse
-    #     ) or not isinstance(send_response.root.result, Task):
-    #         print("Received a non-success or non-task response. Cannot proceed.")
-    #         return
-
-    #     response_content = send_response.root.model_dump_json(exclude_none=True)
-    #     json_content = json.loads(response_content)
-
-    #     resp = []
-    #     if json_content.get("result", {}).get("artifacts"):
-    #         for artifact in json_content["result"]["artifacts"]:
-    #             if artifact.get("parts"):
-    #                 resp.extend(artifact["parts"])
-    #     return resp
     async def send_message(self, agent_name: str, task: str, tool_context: ToolContext):
-        """Sends a task to a remote friend agent and returns their response parts."""
+        """Sends a task to a remote friend agent."""
         if agent_name not in self.remote_agent_connections:
             raise ValueError(f"Agent {agent_name} not found")
         client = self.remote_agent_connections[agent_name]
@@ -245,9 +191,9 @@ class HostAgent:
             raise ValueError(f"Client not available for {agent_name}")
 
         # Simplified task and context ID management
-        state = tool_context.state
-        task_id = state.get("task_id", str(uuid.uuid4()))
-        context_id = state.get("context_id", str(uuid.uuid4()))
+        # state = tool_context.state
+        # task_id = state.get("task_id", str(uuid.uuid4()))
+        # context_id = state.get("context_id", str(uuid.uuid4()))
         message_id = str(uuid.uuid4())
 
         payload = {
@@ -255,8 +201,6 @@ class HostAgent:
                 "role": "user",
                 "parts": [{"type": "text", "text": task}],
                 "messageId": message_id,
-                "taskId": task_id,
-                "contextId": context_id,
             },
         }
 
@@ -266,31 +210,22 @@ class HostAgent:
         send_response: SendMessageResponse = await client.send_message(message_request)
         print("send_response", send_response)
 
-        # Ensure response is successful
-        if not isinstance(send_response.root, SendMessageSuccessResponse):
-            print("Non-success response received from agent")
-            return []
+        if not isinstance(
+            send_response.root, SendMessageSuccessResponse
+        ) or not isinstance(send_response.root.result, Task):
+            print("Received a non-success or non-task response. Cannot proceed.")
+            return
 
-        # Extract artifacts from the response
-        artifacts_data = getattr(send_response.root.result, "artifacts", [])
-        if not artifacts_data:
-            return []
+        response_content = send_response.root.model_dump_json(exclude_none=True)
+        json_content = json.loads(response_content)
 
-        # Create a proper Task object with required fields
-        remote_task = Task(
-            id=task_id,
-            contextId=context_id,
-            status=TaskStatus.pending,  # or TaskStatus.completed if you know it
-            artifacts=[Artifact(**a.model_dump()) for a in artifacts_data],
-        )
-
-        # Flatten all parts into a single list to return
         resp = []
-        for artifact in remote_task.artifacts:
-            if artifact.parts:
-                resp.extend(artifact.parts)
-
+        if json_content.get("result", {}).get("artifacts"):
+            for artifact in json_content["result"]["artifacts"]:
+                if artifact.get("parts"):
+                    resp.extend(artifact["parts"])
         return resp
+
 
 def _get_initialized_host_agent_sync():
     """Synchronously creates and initializes the HostAgent."""
