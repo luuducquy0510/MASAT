@@ -52,4 +52,4 @@ adk web
 ```
 
 ### Demo question: 
-I’m planning a trip from San Francisco to Tokyo from October 10 to October 15. Can you help me find a flight, a hotel, and suggest some fun activities while I’m there?
+I’m planning a trip from Hanoi, VietNam to Tokyo from October 10 to October 15. Can you help me find a flight, a hotel, and suggest some fun activities in under $5000 total while I’m there? Then make a full schedule as detail as possible for me with cost next to each section.

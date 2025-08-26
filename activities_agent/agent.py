@@ -1,28 +1,14 @@
-from datetime import date, datetime, timedelta
+import sys
+import os
+sys.path.append(os.path.dirname(os.path.dirname(__file__)))
 
 from google.adk.agents import LlmAgent
-from google.adk.tools.mcp_tool.mcp_toolset import MCPToolset, StdioConnectionParams
-from google.adk.tools.mcp_tool.mcp_session_manager import StdioServerParameters
-import json
-import os
 from dotenv import load_dotenv
-from langchain_tavily import TavilySearch
+from tools import web_search
+from google.adk.tools import google_search
 
 
 load_dotenv()
-
-SCRIPT_PATH = os.path.abspath("../mcp_tools.py")
-TAVILY_API_KEY = os.getenv("TAVILY_API_KEY")  # Hoặc gán trực tiếp nếu cần
-
-def web_search(query: str, max_results: int = 3) -> list[dict]:
-    """
-    Perform a Tavily search and return a list of results.
-    Each result includes the title, snippet, and URL.
-    """
-    tavily_search_tool = TavilySearch(max_results=max_results, topic="general")
-    results = tavily_search_tool.invoke({"query": query})
-
-    return results
 
 def create_agent() -> LlmAgent:
     """Constructs the ADK agent for Activities."""
