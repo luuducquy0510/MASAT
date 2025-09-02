@@ -6,3 +6,4 @@ nest-asyncio
 fastmcp
 beautifulsoup4
 langchain-tavily
+cachetools

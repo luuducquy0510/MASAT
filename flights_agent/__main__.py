@@ -62,7 +62,7 @@ def main():
             description=(
                 "An agent that searches for flight information including schedules, prices, "
                 "and availability. It only handles flight-related requests and uses the "
-                "search_flights tool with origin, destination, and date as required inputs."
+                "It uses web search with origin, destination, and date as required inputs."
             ),
             url=f"http://{host}:{port}/",
             version="1.0.0",
