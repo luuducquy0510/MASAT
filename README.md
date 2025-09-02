@@ -6,10 +6,10 @@
 
 Before running the application locally, ensure you have the following installed:
 
-1. **python 3.13**: Python 3.13 is required to run a2a-sdk
+1. **python 3.12**: Python 3.12 or above is required to run a2a-sdk
 2. **set up .env**
 
-Create a `.env` file in the root of the `a2a_friend_scheduling` directory with your Google API Key:
+Create a `.env` file in the root of the `MASAT` directory with your Google API Key:
 
 ```bash
 GOOGLE_API_KEY="your_api_key_here"
@@ -52,4 +52,4 @@ adk web
 ```
 
 ### Demo question: 
-I’m planning a trip from Hanoi, VietNam to Tokyo from October 10 to October 15. Can you help me find a flight, a hotel, and suggest some fun activities in under $5000 total while I’m there? Then make a full schedule as detail as possible for me with cost next to each section.
+I’m planning a 7-day trip from Hanoi, VietNam to Tokyo. Can you help me find a flight, a hotel, and suggest some fun activities in under $5000 total while I’m there? Then make a full schedule as detail as possible for me with cost next to each section.
